@@ -1,0 +1,25 @@
+{
+    "name": "supsign/base-api",
+    "description": "Laravel Extension for APIs",
+    "keywords": ["api", "composer", "laravel"],
+    "license": "MIT",
+    "authors": [{
+        "name": "Florian Ratz",
+        "email": "florian.ratz@supsign.ch"
+    }],
+    "autoload": {
+        "psr-4": {
+            "Supsign\\Laravel\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Supsign\\Laravel\\BaseApiServiceProvider"
+            ],
+            "aliases": {
+                "BaseApi": "Supsign\\Laravel\\BaseApi"
+            }
+        }
+    }
+}
