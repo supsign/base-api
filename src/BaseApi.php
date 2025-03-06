@@ -81,8 +81,7 @@ class BaseApi
     protected function executeTokenCall(array $requestData, string $requestMethod): string
     {
         //  We need some static method that create a "PendingRequest" object without changing anything.
-        $request = Http::timeout($this->timeout);
-        $request = $this->applyRequestEncoding($request);
+        $request = $this->applyRequestEncoding(Http::timeout($this->timeout));
 
         return $request->{$requestMethod}($this->authUrl, $requestData);
     }
@@ -176,8 +175,9 @@ class BaseApi
 
     protected function makeRequest(): self
     {
-        $this->request = Http::baseUrl($this->baseUrl)->withHeaders($this->getHeaders());
-        $this->request = $this->applyRequestEncoding($this->request);
+        $this->request = $this->applyRequestEncoding(
+            Http::baseUrl($this->baseUrl)->withHeaders($this->getHeaders())
+        );
 
         return $this;
     }
