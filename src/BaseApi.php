@@ -21,10 +21,12 @@ class BaseApi
     protected string $endpoint;
     protected ?string $endpointCache = null;
     protected array $headers = [];
-    protected array|object $requestData = [];
-    protected string $requestMethod;
     protected PendingRequest $request;
+    protected array|object $requestData = [];
+    protected ?string $requestEncoding = null;
+    protected string $requestMethod;
     protected array|object $response;
+    protected int $timeout = 10;    //  in seconds
     protected string $url;
     protected bool $useCache = false;
 
@@ -78,20 +80,22 @@ class BaseApi
 
     protected function executeTokenCall(array $requestData, string $requestMethod): string
     {
-        return Http::{$requestMethod}($this->authUrl, $requestData);
+        //  We need some static method that create a "PendingRequest" object without changing anything.
+        $request = Http::timeout($this->timeout);
+        $request = $this->applyRequestEncoding($request);
+
+        return $request->{$requestMethod}($this->authUrl, $requestData);
     }
 
-    protected function fetchBearerToken(array $requestData = [], $requestMethod = 'post'): string
+    protected function fetchBearerToken(array $requestData = [], string $requestMethod = 'post'): string
     {
         if (empty($this->bearerToken)) {
-            if (empty($requestData)) {
-                $requestData = [
-                    'client_id' => $this->clientId,
-                    'client_secret' => $this->clientSecret,
-                    'grant_type' => 'client_credentials',
-                    'scope' => 'token',
-                ];
-            }
+            $requestData = array_merge([
+                'client_id' => $this->clientId,
+                'client_secret' => $this->clientSecret,
+                'grant_type' => 'client_credentials',
+                'scope' => 'token',
+            ], $requestData);
 
             $this->bearerToken = $this->executeTokenCall($requestData, $requestMethod);
         }
@@ -173,6 +177,7 @@ class BaseApi
     protected function makeRequest(): self
     {
         $this->request = Http::baseUrl($this->baseUrl)->withHeaders($this->getHeaders());
+        $this->request = $this->applyRequestEncoding($this->request);
 
         return $this;
     }
@@ -190,6 +195,19 @@ class BaseApi
         $this->requestData = $requestData;
 
         return $this;
+    }
+
+    protected function applyRequestEncoding(PendingRequest $request): PendingRequest
+    {
+        switch (strtolower($this->requestEncoding)) {
+            case 'asform':
+            case 'form':
+            case 'x-www-form-urlencoded':
+                return $request->asForm();
+
+            default:
+                return $request;
+        }
     }
 
     protected function setRequestMethod(string $requestMethod): self
