@@ -24,6 +24,7 @@ class BaseApi
     protected PendingRequest $request;
     protected array|object $requestData = [];
     protected ?string $requestEncoding = null;
+    protected bool|null|string $requestEncodingCache = false;
     protected string $requestMethod;
     protected array|object $response;
     protected int $timeout = 10;    //  in seconds
@@ -46,6 +47,19 @@ class BaseApi
         }
 
         return $this;
+    }
+
+    protected function applyRequestEncoding(PendingRequest $request): PendingRequest
+    {
+        switch (strtolower($this->requestEncoding)) {
+            case 'asform':
+            case 'form':
+            case 'x-www-form-urlencoded':
+                return $request->asForm();
+
+            default:
+                return $request;
+        }
     }
 
     protected function cacheResponse(): self
@@ -197,17 +211,15 @@ class BaseApi
         return $this;
     }
 
-    protected function applyRequestEncoding(PendingRequest $request): PendingRequest
+    protected function restoreRequestEncoding(): self
     {
-        switch (strtolower($this->requestEncoding)) {
-            case 'asform':
-            case 'form':
-            case 'x-www-form-urlencoded':
-                return $request->asForm();
-
-            default:
-                return $request;
+        if ($this->requestEncodingCache === false) {
+            return $this;
         }
+
+        $this->requestEncoding = $this->requestEncodingCache;
+
+        return $this;
     }
 
     protected function setRequestMethod(string $requestMethod): self
@@ -226,10 +238,19 @@ class BaseApi
     protected function setResponse(Response $response): self
     {
         $this
+            ->restoreRequestEncoding()
             ->checkResponse($response)
             ->response = json_decode($response->body());
 
         return $this->cacheResponse();
+    }
+
+    protected function setTemporaryRequestEncoding(?string $encoding): self
+    {
+        $this->requestEncodingCache = $this->requestEncoding;
+        $this->requestEncoding = $encoding;
+
+        return $this;
     }
 
     protected function useBasicAuth(): self
