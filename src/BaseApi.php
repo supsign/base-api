@@ -218,6 +218,7 @@ class BaseApi
         }
 
         $this->requestEncoding = $this->requestEncodingCache;
+        $this->requestEncodingCache = false;
 
         return $this;
     }
