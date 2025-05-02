@@ -127,7 +127,7 @@ class BaseApi
             throw new \Exception('no endpoint was specified');
         }
 
-        return static::class.':'.$this->endpoint.':'.implode('-', $this->requestData);
+        return static::class.':'.$this->endpoint.':'.md5(serialize($this->requestData));
     }
 
     protected function getHeaders(): array
