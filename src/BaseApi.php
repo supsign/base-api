@@ -64,7 +64,7 @@ class BaseApi
 
     protected function cacheResponse(): self
     {
-        if ($this->useCache) {
+        if ($this->useCache && !empty($this->response)) {
             Cache::put($this->getCacheKey(), $this->response, $this->cacheLifetime * 60);
         }
 
