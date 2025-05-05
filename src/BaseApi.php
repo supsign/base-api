@@ -31,6 +31,20 @@ class BaseApi
     protected string $url;
     protected bool $useCache = false;
 
+    public function useCache(bool $use = true): self
+    {
+        $this->useCache = $use;
+
+        return $this;
+    }
+
+    public function setCacheLifetime(int $minutes): self
+    {
+        $this->cacheLifetime = abs($minutes);
+
+        return $this;
+    }
+
     protected function authenticateRequest(): self
     {
         switch ($this->authMethod) {
@@ -257,13 +271,6 @@ class BaseApi
     protected function useBasicAuth(): self
     {
         $this->authMethod = 'basic';
-
-        return $this;
-    }
-
-    protected function useCache(): self
-    {
-        $this->useCache = true;
 
         return $this;
     }
