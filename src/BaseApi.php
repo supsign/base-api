@@ -31,16 +31,16 @@ class BaseApi
     protected string $url;
     protected bool $useCache = false;
 
-    public function useCache(bool $use = true): self
+    public function setCacheLifetime(int $minutes): self
     {
-        $this->useCache = $use;
+        $this->cacheLifetime = abs($minutes);
 
         return $this;
     }
 
-    public function setCacheLifetime(int $minutes): self
+    public function useCache(bool $use = true): self
     {
-        $this->cacheLifetime = abs($minutes);
+        $this->useCache = $use;
 
         return $this;
     }
@@ -204,7 +204,10 @@ class BaseApi
     protected function makeRequest(): self
     {
         $this->request = $this->applyRequestEncoding(
-            Http::baseUrl($this->baseUrl)->withHeaders($this->getHeaders())
+            Http::baseUrl($this->baseUrl)
+                ->connectTimeout($this->timeout)
+                ->timeout($this->timeout)
+                ->withHeaders($this->getHeaders())
         );
 
         return $this;
