@@ -27,7 +27,7 @@ class BaseApi
     protected bool|null|string $requestEncodingCache = false;
     protected string $requestMethod;
     protected array|object $response;
-    protected int $timeout = 10;    //  in seconds
+    protected int $timeout = 30;    //  in seconds
     protected string $url;
     protected bool $useCache = false;
 
