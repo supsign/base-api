@@ -2,6 +2,7 @@
 
 namespace Supsign\Laravel;
 
+use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -15,9 +16,10 @@ class BaseApi
     protected string $authUrl;
     protected string $baseUrl;
     protected string $bearerToken;
-    protected int $cacheLifetime = 30;  //  in minutes
+    protected int $cacheLifetime = 30;                  // in minutes
     protected string $clientId;
     protected string $clientSecret;
+    protected int $connectTimeout = 5;                  // in seconds
     protected string $endpoint;
     protected ?string $endpointCache = null;
     protected array $headers = [];
@@ -27,9 +29,14 @@ class BaseApi
     protected bool|null|string $requestEncodingCache = false;
     protected string $requestMethod;
     protected array|object $response;
-    protected int $timeout = 30;    //  in seconds
+    protected int $timeout = 30;                        // in seconds
+    protected int $tokenCacheLifetime = 60;             // in minutes
+    protected string $tokenKey = 'access_token';
+    protected string $tokenCache;
+    protected Response $tokenResponse;
     protected string $url;
     protected bool $useCache = false;
+    protected bool $useTokenCache = false;
 
     public function setCacheLifetime(int $minutes): self
     {
@@ -38,9 +45,23 @@ class BaseApi
         return $this;
     }
 
+    public function setTokenCacheLifetime(int $minutes): self
+    {
+        $this->tokenCacheLifetime = abs($minutes);
+
+        return $this;
+    }
+
     public function useCache(bool $use = true): self
     {
         $this->useCache = $use;
+
+        return $this;
+    }
+
+    public function useTokenCache(bool $use = true): self
+    {
+        $this->useTokenCache = $use;
 
         return $this;
     }
@@ -92,6 +113,15 @@ class BaseApi
         return $this;
     }
 
+    protected function cacheToken(string $token): self
+    {
+        if ($this->useTokenCache) {
+            Cache::add($this->getTokenCacheKey(), $token, $this->tokenCacheLifetime * 60);
+        }
+
+        return $this;
+    }
+
     protected function executeCall(): self
     {
         if ($this->loadResponseFromCache()) {
@@ -106,39 +136,43 @@ class BaseApi
             );
     }
 
-    protected function executeTokenCall(array $requestData, string $requestMethod): string
+    protected function fetchBearerToken(array $requestData = [], string $requestMethod = 'post'): self
     {
-        //  We need some static method that create a "PendingRequest" object without changing anything.
-        $request = $this->applyRequestEncoding(Http::timeout($this->timeout));
+        $requestData = array_merge([
+            'client_id' => $this->clientId,
+            'client_secret' => $this->clientSecret,
+            'grant_type' => 'client_credentials',
+            'scope' => 'token',
+        ], $requestData);
 
-        return $request->{$requestMethod}($this->authUrl, $requestData);
-    }
+        $this->tokenResponse = $this
+            ->applyRequestEncoding(
+                Http::connectTimeout($this->connectTimeout)->timeout($this->timeout)
+            )
+            ->{$requestMethod}($this->authUrl, $requestData);
 
-    protected function fetchBearerToken(array $requestData = [], string $requestMethod = 'post'): string
-    {
-        if (empty($this->bearerToken)) {
-            $requestData = array_merge([
-                'client_id' => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'grant_type' => 'client_credentials',
-                'scope' => 'token',
-            ], $requestData);
-
-            $this->bearerToken = $this->executeTokenCall($requestData, $requestMethod);
-        }
-
-        return $this->bearerToken;
+        return $this->checkResponse($this->tokenResponse);
     }
 
     protected function getBearerToken(): string
     {
-        return $this->fetchBearerToken();
+        if ($this->loadTokenFromCache()) {
+            return $this->tokenCache;
+        }
+
+        if (empty($this->tokenResponse)) {
+            $this->fetchBearerToken();
+        }
+
+        $this->cacheToken($token = $this->tokenResponse->json($this->tokenKey));
+
+        return $token;
     }
 
     protected function getCacheKey(): string
     {
         if (empty($this->endpoint)) {
-            throw new \Exception('no endpoint was specified');
+            throw new Exception('no endpoint was specified');
         }
 
         return static::class.':'.$this->baseUrl.'/'.$this->endpoint.':'.md5(serialize($this->requestData));
@@ -182,10 +216,24 @@ class BaseApi
         return $this->response;
     }
 
+    protected function getTokenCacheKey(): string
+    {
+        return static::class.':'.$this->authUrl.':'.md5(serialize($this->requestData));
+    }
+
     protected function loadResponseFromCache(): bool
     {
         if ($existsInCache = $this->useCache && Cache::has($this->getCacheKey())) {
             $this->response = Cache::get($this->getCacheKey());
+        }
+
+        return $existsInCache;
+    }
+
+    protected function loadTokenFromCache(): bool
+    {
+        if ($existsInCache = $this->useTokenCache && Cache::has($this->getTokenCacheKey())) {
+            $this->tokenCache = Cache::get($this->getTokenCacheKey());
         }
 
         return $existsInCache;
@@ -205,7 +253,7 @@ class BaseApi
     {
         $this->request = $this->applyRequestEncoding(
             Http::baseUrl($this->baseUrl)
-                ->connectTimeout($this->timeout)
+                ->connectTimeout($this->connectTimeout)
                 ->timeout($this->timeout)
                 ->withHeaders($this->getHeaders())
         );
