@@ -16,7 +16,7 @@ class BaseApi
     protected string $authUrl;
     protected string $baseUrl;
     protected string $bearerToken;
-    protected int $cacheLifetime = 30;                  //  in minutes
+    protected int $cacheLifetime = 30;                  // in minutes
     protected string $clientId;
     protected string $clientSecret;
     protected int $connectTimeout = 5;                  // in seconds
