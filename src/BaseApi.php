@@ -16,10 +16,10 @@ class BaseApi
     protected string $authUrl;
     protected string $baseUrl;
     protected string $bearerToken;
-    protected int $cacheLifetime = 30;  //  in minutes
+    protected int $cacheLifetime = 30;                  //  in minutes
     protected string $clientId;
     protected string $clientSecret;
-    protected int $connectTimeout = 5;
+    protected int $connectTimeout = 5;                  // in seconds
     protected string $endpoint;
     protected ?string $endpointCache = null;
     protected array $headers = [];
@@ -29,9 +29,10 @@ class BaseApi
     protected bool|null|string $requestEncodingCache = false;
     protected string $requestMethod;
     protected array|object $response;
-    protected int $timeout = 30;    //  in seconds
-    protected int $tokenCacheLifetime = 3000;
+    protected int $timeout = 30;                        // in seconds
+    protected int $tokenCacheLifetime = 60;             // in minutes
     protected string $tokenKey = 'access_token';
+    protected string $tokenCache;
     protected Response $tokenResponse;
     protected string $url;
     protected bool $useCache = false;
@@ -116,6 +117,15 @@ class BaseApi
         return $this;
     }
 
+    protected function cacheToken(string $token): self
+    {
+        if ($this->useTokenCache) {
+            Cache::add($this->getTokenCacheKey(), $token, $this->tokenCacheLifetime * 60);
+        }
+
+        return $this;
+    }
+
     protected function executeCall(): self
     {
         if ($this->loadResponseFromCache()) {
@@ -150,11 +160,17 @@ class BaseApi
 
     protected function getBearerToken(): string
     {
+        if ($this->loadTokenFromCache()) {
+            return $this->tokenCache;
+        }
+
         if (empty($this->tokenResponse)) {
             $this->fetchBearerToken();
         }
 
-        return $this->tokenResponse->json($this->tokenKey);
+        $this->cacheToken($token = $this->tokenResponse->json($this->tokenKey));
+
+        return $token;
     }
 
     protected function getCacheKey(): string
@@ -204,10 +220,24 @@ class BaseApi
         return $this->response;
     }
 
+    protected function getTokenCacheKey(): string
+    {
+        return static::class.':'.$this->authUrl.':'.md5(serialize($this->requestData));
+    }
+
     protected function loadResponseFromCache(): bool
     {
         if ($existsInCache = $this->useCache && Cache::has($this->getCacheKey())) {
             $this->response = Cache::get($this->getCacheKey());
+        }
+
+        return $existsInCache;
+    }
+
+    protected function loadTokenFromCache(): bool
+    {
+        if ($existsInCache = $this->useTokenCache && Cache::has($this->getTokenCacheKey())) {
+            $this->tokenCache = Cache::get($this->getTokenCacheKey());
         }
 
         return $existsInCache;
