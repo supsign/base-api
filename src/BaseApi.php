@@ -69,10 +69,6 @@ class BaseApi
     protected function authenticateRequest(): self
     {
         switch ($this->authMethod) {
-            case 'asform':
-                $this->request->asForm();
-                break;
-
             case 'basic':
                 $this->request->withBasicAuth($this->clientId, $this->clientSecret);
                 break;
