@@ -2,6 +2,7 @@
 
 namespace Supsign\Laravel;
 
+use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -18,6 +19,7 @@ class BaseApi
     protected int $cacheLifetime = 30;  //  in minutes
     protected string $clientId;
     protected string $clientSecret;
+    protected int $connectTimeout = 5;
     protected string $endpoint;
     protected ?string $endpointCache = null;
     protected array $headers = [];
@@ -28,12 +30,23 @@ class BaseApi
     protected string $requestMethod;
     protected array|object $response;
     protected int $timeout = 30;    //  in seconds
+    protected int $tokenCacheLifetime = 3000;
+    protected string $tokenKey = 'access_token';
+    protected Response $tokenResponse;
     protected string $url;
     protected bool $useCache = false;
+    protected bool $useTokenCache = false;
 
     public function setCacheLifetime(int $minutes): self
     {
         $this->cacheLifetime = abs($minutes);
+
+        return $this;
+    }
+
+    public function setTokenCacheLifetime(int $minutes): self
+    {
+        $this->tokenCacheLifetime = abs($minutes);
 
         return $this;
     }
@@ -45,9 +58,20 @@ class BaseApi
         return $this;
     }
 
+    public function useTokenCache(bool $use = true): self
+    {
+        $this->useTokenCache = $use;
+
+        return $this;
+    }
+
     protected function authenticateRequest(): self
     {
         switch ($this->authMethod) {
+            case 'asform':
+                $this->request->asForm();
+                break;
+
             case 'basic':
                 $this->request->withBasicAuth($this->clientId, $this->clientSecret);
                 break;
@@ -106,39 +130,37 @@ class BaseApi
             );
     }
 
-    protected function executeTokenCall(array $requestData, string $requestMethod): string
+    protected function fetchBearerToken(array $requestData = [], string $requestMethod = 'post'): self
     {
-        //  We need some static method that create a "PendingRequest" object without changing anything.
-        $request = $this->applyRequestEncoding(Http::timeout($this->timeout));
+        $requestData = array_merge([
+            'client_id' => $this->clientId,
+            'client_secret' => $this->clientSecret,
+            'grant_type' => 'client_credentials',
+            'scope' => 'token',
+        ], $requestData);
 
-        return $request->{$requestMethod}($this->authUrl, $requestData);
-    }
+        $this->tokenResponse = $this
+            ->applyRequestEncoding(
+                Http::connectTimeout($this->connectTimeout)->timeout($this->timeout)
+            )
+            ->{$requestMethod}($this->authUrl, $requestData);
 
-    protected function fetchBearerToken(array $requestData = [], string $requestMethod = 'post'): string
-    {
-        if (empty($this->bearerToken)) {
-            $requestData = array_merge([
-                'client_id' => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'grant_type' => 'client_credentials',
-                'scope' => 'token',
-            ], $requestData);
-
-            $this->bearerToken = $this->executeTokenCall($requestData, $requestMethod);
-        }
-
-        return $this->bearerToken;
+        return $this->checkResponse($this->tokenResponse);
     }
 
     protected function getBearerToken(): string
     {
-        return $this->fetchBearerToken();
+        if (empty($this->tokenResponse)) {
+            $this->fetchBearerToken();
+        }
+
+        return $this->tokenResponse->json($this->tokenKey);
     }
 
     protected function getCacheKey(): string
     {
         if (empty($this->endpoint)) {
-            throw new \Exception('no endpoint was specified');
+            throw new Exception('no endpoint was specified');
         }
 
         return static::class.':'.$this->baseUrl.'/'.$this->endpoint.':'.md5(serialize($this->requestData));
@@ -205,7 +227,7 @@ class BaseApi
     {
         $this->request = $this->applyRequestEncoding(
             Http::baseUrl($this->baseUrl)
-                ->connectTimeout($this->timeout)
+                ->connectTimeout($this->connectTimeout)
                 ->timeout($this->timeout)
                 ->withHeaders($this->getHeaders())
         );
